@@ -65,7 +65,20 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def assemble_db_and_redis_urls(self) -> "Settings":
-        if not self.DATABASE_URL:
+        if self.DATABASE_URL:
+            url = self.DATABASE_URL.strip()
+            # Normalize database dialect for asyncpg (compatible with Render & Supabase)
+            if url.startswith("postgres://"):
+                url = url.replace("postgres://", "postgresql+asyncpg://", 1)
+            elif url.startswith("postgresql://"):
+                url = url.replace("postgresql://", "postgresql+asyncpg://", 1)
+            elif url.startswith("postgresql+psycopg2://"):
+                url = url.replace("postgresql+psycopg2://", "postgresql+asyncpg://", 1)
+            # asyncpg accepts 'ssl=' rather than 'sslmode='
+            if "sslmode=" in url:
+                url = url.replace("sslmode=", "ssl=")
+            self.DATABASE_URL = url
+        else:
             pwd = f":{self.DB_PASSWORD}" if self.DB_PASSWORD else ""
             self.DATABASE_URL = f"postgresql+asyncpg://{self.DB_USER}{pwd}@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}"
 

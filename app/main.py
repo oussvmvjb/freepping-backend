@@ -6,6 +6,7 @@ from fastapi.responses import JSONResponse
 from app.api.router import api_router
 from app.core.config import settings
 from app.core.exceptions import register_exception_handlers
+from app.db.session import engine
 from app.services.redis.redis_client import redis_client
 
 
@@ -13,8 +14,9 @@ from app.services.redis.redis_client import redis_client
 async def lifespan(app: FastAPI):
     # Startup actions
     yield
-    # Shutdown actions: Close Redis pool cleanly
+    # Shutdown actions: Close Redis pool and database engine cleanly
     await redis_client.close()
+    await engine.dispose()
 
 
 app = FastAPI(
