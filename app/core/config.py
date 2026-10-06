@@ -26,7 +26,10 @@ class Settings(BaseSettings):
 
     # CORS
     FRONTEND_URL: str = "http://localhost:4200"
-    CORS_ORIGINS: Union[List[str], str] = ["http://localhost:4200"]
+    CORS_ORIGINS: Union[List[str], str] = [
+        "http://localhost:4200",
+        "https://freepping.netlify.app",
+    ]
 
     # JWT Authentication Configuration
     JWT_SECRET_KEY: str = "change-this-in-production-super-secret-key-32chars"
@@ -55,13 +58,14 @@ class Settings(BaseSettings):
             if v.startswith("[") and v.endswith("]"):
                 import json
                 try:
-                    return json.loads(v)
+                    origins = json.loads(v)
+                    return [str(i).strip().rstrip("/") for i in origins if i]
                 except Exception:
                     pass
-            return [i.strip() for i in v.split(",") if i.strip()]
+            return [i.strip().rstrip("/") for i in v.split(",") if i.strip()]
         elif isinstance(v, list):
-            return v
-        return ["http://localhost:4200"]
+            return [str(i).strip().rstrip("/") for i in v if i]
+        return ["http://localhost:4200", "https://freepping.netlify.app"]
 
     @model_validator(mode="after")
     def assemble_db_and_redis_urls(self) -> "Settings":
@@ -86,10 +90,14 @@ class Settings(BaseSettings):
             auth = f":{self.REDIS_PASSWORD}@" if self.REDIS_PASSWORD and self.REDIS_PASSWORD.strip() else ""
             self.REDIS_URL = f"redis://{auth}{self.REDIS_HOST}:{self.REDIS_PORT}/{self.REDIS_DB}"
 
-        # Ensure FRONTEND_URL is added to CORS_ORIGINS
+        # Ensure FRONTEND_URL and Netlify production URL are present in CORS_ORIGINS
         if isinstance(self.CORS_ORIGINS, list):
-            if self.FRONTEND_URL and self.FRONTEND_URL not in self.CORS_ORIGINS:
-                self.CORS_ORIGINS.append(self.FRONTEND_URL)
+            if self.FRONTEND_URL:
+                cleaned = self.FRONTEND_URL.strip().rstrip("/")
+                if cleaned and cleaned not in self.CORS_ORIGINS:
+                    self.CORS_ORIGINS.append(cleaned)
+            if "https://freepping.netlify.app" not in self.CORS_ORIGINS:
+                self.CORS_ORIGINS.append("https://freepping.netlify.app")
 
         return self
 
