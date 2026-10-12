@@ -36,6 +36,19 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
         return False
 
 
+def hash_pin(pin: str) -> str:
+    """Hashes a plaintext PIN using Argon2id."""
+    if not pin or len(pin) < 4:
+        raise ValueError("PIN must be at least 4 digits.")
+    return _ph.hash(pin)
+
+
+def verify_pin(plain_pin: str, hashed_pin: str) -> bool:
+    """Verifies a plaintext PIN against an Argon2id hash."""
+    return verify_password(plain_pin, hashed_pin)
+
+
+
 def hash_token(raw_token: str) -> str:
     """Computes a SHA-256 cryptographic hash of the raw token for secure storage."""
     return hashlib.sha256(raw_token.encode("utf-8")).hexdigest()

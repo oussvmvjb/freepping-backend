@@ -1,4 +1,5 @@
 import uuid
+from decimal import Decimal
 from typing import List, Optional, Tuple
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -50,6 +51,10 @@ class ProductRepository:
         is_featured: Optional[bool] = None,
         is_active_only: bool = True,
         seller_id: Optional[uuid.UUID] = None,
+        sort: str = "newest",
+        min_price: Optional[Decimal] = None,
+        max_price: Optional[Decimal] = None,
+        in_stock_only: bool = False,
     ) -> Tuple[List[Product], int]:
         stmt = (
             select(Product)
@@ -72,6 +77,17 @@ class ProductRepository:
         if seller_id is not None:
             stmt = stmt.where(Product.seller_id == seller_id)
 
+        if min_price is not None:
+            stmt = stmt.where(Product.price >= min_price)
+
+        if max_price is not None:
+            stmt = stmt.where(Product.price <= max_price)
+
+        if in_stock_only:
+            stmt = stmt.where(
+                Product.variants.any((ProductVariant.is_active == True) & (ProductVariant.stock > 0))
+            )
+
         if search:
             search_term = f"%{search.strip()}%"
             stmt = stmt.where(
@@ -87,14 +103,25 @@ class ProductRepository:
         total_count_result = await self.session.execute(count_stmt)
         total = total_count_result.scalar_one()
 
-        # Apply ordering and pagination
-        stmt = stmt.order_by(Product.created_at.desc())
+        # Apply ordering
+        if sort == "price_asc":
+            stmt = stmt.order_by(Product.price.asc(), Product.created_at.desc())
+        elif sort == "price_desc":
+            stmt = stmt.order_by(Product.price.desc(), Product.created_at.desc())
+        elif sort == "popular":
+            stmt = stmt.order_by(Product.likes_count.desc(), Product.created_at.desc())
+        elif sort == "name_asc":
+            stmt = stmt.order_by(Product.name.asc(), Product.created_at.desc())
+        else:  # newest
+            stmt = stmt.order_by(Product.created_at.desc())
+
         stmt = stmt.offset((page - 1) * page_size).limit(page_size)
 
         result = await self.session.execute(stmt)
         items = list(result.scalars().all())
 
         return items, total
+
 
     async def create(
         self,

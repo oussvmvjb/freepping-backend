@@ -122,3 +122,31 @@ def check_rate_limit(action: str, max_requests: int) -> Callable:
             raise RateLimitException(f"Too many {action} requests. Please wait a minute and try again.")
 
     return dependency
+
+
+async def get_optional_current_user(
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(http_bearer),
+    db: AsyncSession = Depends(get_db),
+) -> Optional[User]:
+    """
+    Optionally authenticates the caller. Returns User if token is valid, else None.
+    Used on public endpoints that enrich responses with user-specific data (e.g. is_liked).
+    """
+    if not credentials or not credentials.credentials:
+        return None
+    try:
+        token = credentials.credentials
+        payload = decode_token(token)
+        if payload.get("type") != "access":
+            return None
+        user_id_str = payload.get("sub")
+        if not user_id_str:
+            return None
+        user_id = uuid.UUID(user_id_str)
+        user_repo = UserRepository(db)
+        user = await user_repo.get_by_id(user_id)
+        if user and user.is_active:
+            return user
+    except Exception:
+        pass
+    return None

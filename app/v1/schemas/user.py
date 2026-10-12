@@ -30,3 +30,14 @@ class UserStatusUpdateRequest(BaseModel):
 class UserListResponse(BaseModel):
     items: List[UserResponse]
     total: int
+
+
+class UserProfileUpdateRequest(BaseModel):
+    first_name: Optional[str] = Field(None, max_length=100, description="User first name")
+    last_name: Optional[str] = Field(None, max_length=100, description="User last name")
+
+
+class UserChangePasswordRequest(BaseModel):
+    current_password: str = Field(..., min_length=6, description="Current account password")
+    new_password: str = Field(..., min_length=6, description="New account password")
+

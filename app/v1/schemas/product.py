@@ -60,11 +60,39 @@ class ProductUpdate(BaseModel):
     category_id: Optional[uuid.UUID] = None
 
 
+class ProductLikeToggleResponse(BaseModel):
+    liked: bool = Field(..., description="Whether the product is currently liked by the user")
+    likes_count: int = Field(..., description="Current total likes count for the product")
+
+
+class ProductLikerItemResponse(BaseModel):
+    id: uuid.UUID
+    user_id: uuid.UUID
+    email: Optional[str] = None
+    full_name: Optional[str] = None
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class ProductLikersListResponse(BaseModel):
+    items: List[ProductLikerItemResponse]
+    page: int
+    page_size: int
+    total: int
+    pages: int
+    likes_count: int
+
+
 class ProductResponse(ProductBase):
     id: uuid.UUID
     seller_id: Optional[uuid.UUID] = None
     created_at: datetime
     updated_at: datetime
+    likes_count: int = 0
+    is_liked: bool = False
+    in_stock: bool = False
+    discount_percent: Optional[int] = None
     category: Optional[CategoryResponse] = None
     images: List[ProductImageResponse] = []
     variants: List[ProductVariantResponse] = []
@@ -78,3 +106,4 @@ class ProductListResponse(BaseModel):
     page_size: int
     total: int
     pages: int
+

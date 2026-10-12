@@ -26,9 +26,14 @@ from app.db.repositories.refresh_session_repository import RefreshSessionReposit
 from app.db.repositories.user_repository import UserRepository
 from app.services.redis.redis_auth_service import redis_auth_service
 from app.v1.schemas.auth import LoginRequest, RegisterRequest, TokenResponse
-from app.v1.schemas.user import UserResponse
+from app.v1.schemas.user import (
+    UserChangePasswordRequest,
+    UserProfileUpdateRequest,
+    UserResponse,
+)
 
 logger = logging.getLogger(__name__)
+
 
 
 class AuthService:
@@ -223,3 +228,33 @@ class AuthService:
             expires_in=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
             user=UserResponse.model_validate(user),
         )
+
+    async def update_profile(
+        self,
+        user: User,
+        payload: UserProfileUpdateRequest,
+    ) -> UserResponse:
+        if payload.first_name is not None:
+            user.first_name = payload.first_name
+        if payload.last_name is not None:
+            user.last_name = payload.last_name
+        self.session.add(user)
+        await self.session.commit()
+        await self.session.refresh(user)
+        return UserResponse.model_validate(user)
+
+    async def change_password(
+        self,
+        user: User,
+        payload: UserChangePasswordRequest,
+    ) -> None:
+        if not verify_password(payload.current_password, user.password_hash):
+            raise AuthenticationException("Current password is incorrect.")
+
+        user.password_hash = hash_password(payload.new_password)
+        self.session.add(user)
+        await self.session.commit()
+
+        # Revoke all other refresh sessions for this user
+        await self.session_repo.revoke_all_for_user(user.id)
+

@@ -33,6 +33,16 @@ class DuplicateResourceException(AppException):
         )
 
 
+class BusinessRuleException(AppException):
+    """Business rule validation error (HTTP 400)."""
+    def __init__(self, message: str, details: Optional[Any] = None):
+        super().__init__(
+            message=message,
+            status_code=status.HTTP_400_BAD_REQUEST,
+            details=details
+        )
+
+
 class ValidationErrorException(AppException):
     """Validation error (HTTP 422)."""
     def __init__(self, message: str, details: Optional[Any] = None):
@@ -41,6 +51,7 @@ class ValidationErrorException(AppException):
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             details=details
         )
+
 
 
 class AuthenticationException(AppException):

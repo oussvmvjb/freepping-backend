@@ -13,7 +13,12 @@ from app.v1.schemas.auth import (
     RegisterRequest,
     TokenResponse,
 )
-from app.v1.schemas.user import UserResponse
+from app.v1.schemas.user import (
+    UserChangePasswordRequest,
+    UserProfileUpdateRequest,
+    UserResponse,
+)
+
 
 router = APIRouter()
 
@@ -100,3 +105,35 @@ async def get_me(
     current_user: User = Depends(get_current_active_user),
 ) -> UserResponse:
     return UserResponse.model_validate(current_user)
+
+
+@router.patch(
+    "/me",
+    response_model=UserResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Update current authenticated user profile",
+    description="Updates first name and last name for the current authenticated user.",
+)
+async def update_me(
+    payload: UserProfileUpdateRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+) -> UserResponse:
+    service = AuthService(db)
+    return await service.update_profile(current_user, payload)
+
+
+@router.post(
+    "/change-password",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Change account password",
+    description="Verifies current password, updates to new password, and revokes all active refresh sessions.",
+)
+async def change_password(
+    payload: UserChangePasswordRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+) -> None:
+    service = AuthService(db)
+    await service.change_password(current_user, payload)
+

@@ -1,18 +1,23 @@
+from decimal import Decimal
 import uuid
 from typing import Optional
 from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import (
+    check_rate_limit,
     get_current_active_user,
-    require_admin,
+    get_optional_current_user,
     require_seller_or_admin,
 )
+from app.core.config import settings
 from app.db.models.user import User
 from app.db.session import get_db
+from app.services.like_service import LikeService
 from app.services.product_service import ProductService
 from app.v1.schemas.product import (
     ProductCreate,
+    ProductLikeToggleResponse,
     ProductListResponse,
     ProductResponse,
     ProductUpdate,
@@ -25,15 +30,20 @@ router = APIRouter()
     "",
     response_model=ProductListResponse,
     summary="List products",
-    description="Public endpoint. Retrieve paginated products with optional filtering.",
+    description="Public endpoint with optional auth. Retrieve paginated products with filtering and sorting.",
 )
 async def list_products(
     page: int = Query(1, ge=1, description="Page number"),
     page_size: int = Query(20, ge=1, le=100, description="Items per page"),
-    category_id: Optional[uuid.UUID] = Query(None),
-    search: Optional[str] = Query(None),
-    is_featured: Optional[bool] = Query(None),
+    category_id: Optional[uuid.UUID] = Query(None, description="Filter by Category UUID"),
+    search: Optional[str] = Query(None, description="Search term across name and description"),
+    is_featured: Optional[bool] = Query(None, description="Filter by featured status"),
+    sort: str = Query("newest", description="Sorting order: newest, price_asc, price_desc, popular, name_asc"),
+    min_price: Optional[Decimal] = Query(None, ge=0, description="Minimum price filter"),
+    max_price: Optional[Decimal] = Query(None, ge=0, description="Maximum price filter"),
+    in_stock_only: bool = Query(False, description="Filter only products with active stock > 0"),
     db: AsyncSession = Depends(get_db),
+    current_user: Optional[User] = Depends(get_optional_current_user),
 ) -> ProductListResponse:
     service = ProductService(db)
     return await service.list_products(
@@ -42,6 +52,11 @@ async def list_products(
         category_id=category_id,
         search=search,
         is_featured=is_featured,
+        sort=sort,
+        min_price=min_price,
+        max_price=max_price,
+        in_stock_only=in_stock_only,
+        current_user=current_user,
     )
 
 
@@ -65,14 +80,15 @@ async def list_my_products(
     "/{product_id}",
     response_model=ProductResponse,
     summary="Get product by ID",
-    description="Public endpoint. Retrieve full product details including category, images, and variants.",
+    description="Public endpoint with optional auth. Retrieve full product details.",
 )
 async def get_product(
     product_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
+    current_user: Optional[User] = Depends(get_optional_current_user),
 ) -> ProductResponse:
     service = ProductService(db)
-    return await service.get_product(product_id)
+    return await service.get_product(product_id, current_user=current_user)
 
 
 @router.post(
@@ -130,3 +146,39 @@ async def delete_product(
 ) -> None:
     service = ProductService(db)
     await service.delete_product(product_id, current_user)
+
+
+# ── Product Likes (Part 1) ───────────────────────────────────────────────────
+
+@router.post(
+    "/{product_id}/like",
+    response_model=ProductLikeToggleResponse,
+    tags=["Likes"],
+    summary="Like product",
+    description="Idempotent: adds product to user favorites and increments likes count.",
+    dependencies=[Depends(check_rate_limit("like_toggle", settings.RATE_LIMIT_LIKE_PER_MINUTE))],
+)
+async def like_product(
+    product_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+) -> ProductLikeToggleResponse:
+    service = LikeService(db)
+    return await service.like_product(product_id, current_user)
+
+
+@router.delete(
+    "/{product_id}/like",
+    response_model=ProductLikeToggleResponse,
+    tags=["Likes"],
+    summary="Unlike product",
+    description="Idempotent: removes product from user favorites and decrements likes count.",
+    dependencies=[Depends(check_rate_limit("like_toggle", settings.RATE_LIMIT_LIKE_PER_MINUTE))],
+)
+async def unlike_product(
+    product_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+) -> ProductLikeToggleResponse:
+    service = LikeService(db)
+    return await service.unlike_product(product_id, current_user)

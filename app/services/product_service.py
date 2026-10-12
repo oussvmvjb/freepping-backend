@@ -25,12 +25,32 @@ from app.v1.schemas.product import (
 )
 
 
+from decimal import Decimal
+from app.db.repositories.product_like_repository import ProductLikeRepository
+
+
 class ProductService:
     def __init__(self, session: AsyncSession):
         self.session = session
         self.repository = ProductRepository(session)
         self.category_repo = CategoryRepository(session)
         self.variant_repo = ProductVariantRepository(session)
+        self.like_repo = ProductLikeRepository(session)
+
+    @staticmethod
+    def _enrich_product(product: Product, is_liked: bool = False) -> ProductResponse:
+        in_stock = any(v.is_active and (v.stock or 0) > 0 for v in (product.variants or []))
+        discount_percent = None
+        if product.compare_price and product.price and product.compare_price > product.price:
+            discount_percent = int(
+                round(((product.compare_price - product.price) / product.compare_price) * 100)
+            )
+
+        resp = ProductResponse.model_validate(product)
+        resp.is_liked = is_liked
+        resp.in_stock = in_stock
+        resp.discount_percent = discount_percent
+        return resp
 
     def _generate_list_cache_key(
         self,
@@ -39,9 +59,16 @@ class ProductService:
         category_id: Optional[uuid.UUID],
         search: Optional[str],
         is_featured: Optional[bool],
-        seller_id: Optional[uuid.UUID] = None,
+        seller_id: Optional[uuid.UUID],
+        sort: str,
+        min_price: Optional[Decimal],
+        max_price: Optional[Decimal],
+        in_stock_only: bool,
     ) -> str:
-        key_raw = f"{page}:{page_size}:{category_id}:{search}:{is_featured}:{seller_id}"
+        key_raw = (
+            f"{page}:{page_size}:{category_id}:{search}:{is_featured}:"
+            f"{seller_id}:{sort}:{min_price}:{max_price}:{in_stock_only}"
+        )
         hash_val = hashlib.md5(key_raw.encode("utf-8")).hexdigest()
         return f"products:list:{hash_val}"
 
@@ -53,36 +80,56 @@ class ProductService:
         search: Optional[str] = None,
         is_featured: Optional[bool] = None,
         seller_id: Optional[uuid.UUID] = None,
+        sort: str = "newest",
+        min_price: Optional[Decimal] = None,
+        max_price: Optional[Decimal] = None,
+        in_stock_only: bool = False,
+        current_user: Optional[User] = None,
     ) -> ProductListResponse:
-        cache_key = self._generate_list_cache_key(page, page_size, category_id, search, is_featured, seller_id)
+        cache_key = self._generate_list_cache_key(
+            page, page_size, category_id, search, is_featured, seller_id,
+            sort, min_price, max_price, in_stock_only
+        )
         cached = await redis_client.get(cache_key)
         if cached is not None:
-            return ProductListResponse.model_validate(cached)
+            response = ProductListResponse.model_validate(cached)
+        else:
+            items, total = await self.repository.list_products(
+                page=page,
+                page_size=page_size,
+                category_id=category_id,
+                search=search,
+                is_featured=is_featured,
+                is_active_only=True,
+                seller_id=seller_id,
+                sort=sort,
+                min_price=min_price,
+                max_price=max_price,
+                in_stock_only=in_stock_only,
+            )
 
-        items, total = await self.repository.list_products(
-            page=page,
-            page_size=page_size,
-            category_id=category_id,
-            search=search,
-            is_featured=is_featured,
-            is_active_only=True,
-            seller_id=seller_id,
-        )
+            pages = math.ceil(total / page_size) if total > 0 else 0
+            response = ProductListResponse(
+                items=[self._enrich_product(item, is_liked=False) for item in items],
+                page=page,
+                page_size=page_size,
+                total=total,
+                pages=pages,
+            )
 
-        pages = math.ceil(total / page_size) if total > 0 else 0
-        response = ProductListResponse(
-            items=[ProductResponse.model_validate(item) for item in items],
-            page=page,
-            page_size=page_size,
-            total=total,
-            pages=pages,
-        )
+            await redis_client.set(
+                cache_key,
+                response.model_dump(),
+                ttl=settings.CACHE_TTL_PRODUCT_LIST,
+            )
 
-        await redis_client.set(
-            cache_key,
-            response.model_dump(),
-            ttl=settings.CACHE_TTL_PRODUCT_LIST
-        )
+        # Enrich personalized is_liked if caller is authenticated
+        if current_user and response.items:
+            product_ids = [item.id for item in response.items]
+            liked_ids = await self.like_repo.get_user_liked_product_ids(current_user.id, product_ids)
+            for item in response.items:
+                item.is_liked = item.id in liked_ids
+
         return response
 
     async def list_my_products(
@@ -100,34 +147,47 @@ class ProductService:
         )
 
         pages = math.ceil(total / page_size) if total > 0 else 0
+        product_ids = [item.id for item in items]
+        liked_ids = await self.like_repo.get_user_liked_product_ids(current_user.id, product_ids)
+
         return ProductListResponse(
-            items=[ProductResponse.model_validate(item) for item in items],
+            items=[self._enrich_product(item, is_liked=(item.id in liked_ids)) for item in items],
             page=page,
             page_size=page_size,
             total=total,
             pages=pages,
         )
 
-    async def get_product(self, product_id: uuid.UUID) -> ProductResponse:
+    async def get_product(
+        self,
+        product_id: uuid.UUID,
+        current_user: Optional[User] = None,
+    ) -> ProductResponse:
         cache_key = f"products:{product_id}"
         cached = await redis_client.get(cache_key)
         if cached is not None:
-            return ProductResponse.model_validate(cached)
+            response = ProductResponse.model_validate(cached)
+        else:
+            product = await self.repository.get_by_id(product_id)
+            if not product:
+                raise ResourceNotFoundException("Product", product_id)
 
-        product = await self.repository.get_by_id(product_id)
-        if not product:
-            raise ResourceNotFoundException("Product", product_id)
+            response = self._enrich_product(product, is_liked=False)
+            await redis_client.set(
+                cache_key,
+                response.model_dump(),
+                ttl=settings.CACHE_TTL_PRODUCT_DETAIL,
+            )
 
-        response = ProductResponse.model_validate(product)
-        await redis_client.set(
-            cache_key,
-            response.model_dump(),
-            ttl=settings.CACHE_TTL_PRODUCT_DETAIL
-        )
+        if current_user:
+            existing = await self.like_repo.get(current_user.id, product_id)
+            response.is_liked = existing is not None
+
         return response
 
     async def create_product(
         self,
+
         product_in: ProductCreate,
         current_user: User,
     ) -> ProductResponse:

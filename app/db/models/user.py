@@ -10,8 +10,13 @@ from app.db.base import Base
 
 if TYPE_CHECKING:
     from app.db.models.product import Product
+    from app.db.models.product_like import ProductLike
     from app.db.models.refresh_session import RefreshSession
     from app.db.models.store import Store
+    from app.db.models.address import Address
+    from app.db.models.cart import Cart
+    from app.db.models.order import Order
+    from app.db.models.saved_payment_method import SavedPaymentMethod
 
 
 class User(Base):
@@ -87,6 +92,35 @@ class User(Base):
     products: Mapped[List["Product"]] = relationship(
         "Product",
         back_populates="seller"
+    )
+    liked_products: Mapped[List["ProductLike"]] = relationship(
+        "ProductLike",
+        back_populates="user",
+        cascade="all, delete-orphan",
+        passive_deletes=True
+    )
+    addresses: Mapped[List["Address"]] = relationship(
+        "Address",
+        back_populates="user",
+        cascade="all, delete-orphan",
+        passive_deletes=True
+    )
+    cart: Mapped[Optional["Cart"]] = relationship(
+        "Cart",
+        back_populates="user",
+        uselist=False,
+        cascade="all, delete-orphan",
+        passive_deletes=True
+    )
+    orders: Mapped[List["Order"]] = relationship(
+        "Order",
+        back_populates="user"
+    )
+    saved_payment_methods: Mapped[List["SavedPaymentMethod"]] = relationship(
+        "SavedPaymentMethod",
+        back_populates="user",
+        cascade="all, delete-orphan",
+        passive_deletes=True
     )
 
     def __repr__(self) -> str:

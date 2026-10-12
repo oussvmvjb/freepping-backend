@@ -1,3 +1,33 @@
-from app.v1.endpoints import categories, health, products
+from app.v1.endpoints import (
+    admin,
+    auth,
+    cart,
+    categories,
+    checkout,
+    delivery_options,
+    gift_cards,
+    health,
+    orders,
+    products,
+    promos,
+    seller,
+    stores,
+    users,
+)
 
-__all__ = ["categories", "health", "products"]
+__all__ = [
+    "admin",
+    "auth",
+    "cart",
+    "categories",
+    "checkout",
+    "delivery_options",
+    "gift_cards",
+    "health",
+    "orders",
+    "products",
+    "promos",
+    "seller",
+    "stores",
+    "users",
+]
