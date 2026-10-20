@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime
 from decimal import Decimal
 from typing import List, Optional
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class DeliveryOptionBase(BaseModel):
@@ -54,3 +54,12 @@ class DeliveryOptionResponse(BaseModel):
     updated_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
+    @field_validator("price", mode="before")
+    @classmethod
+    def convert_price_to_str(cls, v):
+        if isinstance(v, Decimal):
+            return f"{v:.2f}"
+        if v is not None:
+            return str(v)
+        return v
