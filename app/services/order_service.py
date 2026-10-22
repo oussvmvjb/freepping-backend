@@ -361,7 +361,7 @@ class OrderService:
                 "unit_price": unit_price,
                 "quantity": it.quantity,
                 "line_total": line_total,
-                "fulfillment_status": FulfillmentStatus.UNFULFILLED,
+                "fulfillment_status": FulfillmentStatus.PENDING,
             })
 
         promo = cart.promo_code

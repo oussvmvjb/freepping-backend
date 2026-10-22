@@ -44,7 +44,9 @@ class PaymentStatus(str, Enum):
 
 class FulfillmentStatus(str, Enum):
     PENDING = "PENDING"
+    UNFULFILLED = "UNFULFILLED"
     PROCESSING = "PROCESSING"
     SHIPPED = "SHIPPED"
     DELIVERED = "DELIVERED"
     CANCELLED = "CANCELLED"
+
