@@ -58,3 +58,9 @@ env/
 *.swo
 *~
 .DS_Store
+
+# Generated 3D models and temporary file storage
+storage/
+*.glb
+*.gltf
+

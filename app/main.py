@@ -86,6 +86,10 @@ if settings.CORS_ORIGINS:
 # Include API Router
 app.include_router(api_router, prefix=settings.API_V1_STR)
 
+# Also mount Trellis 3D endpoints directly under /api for specification parity (/api/generate-3d, /api/health)
+from app.v1.endpoints.trellis import router as trellis_api_router
+app.include_router(trellis_api_router, prefix="/api", tags=["TRELLIS 3D Generation (/api)"])
+
 
 @app.get("/", tags=["Root"], summary="API Root")
 async def root():

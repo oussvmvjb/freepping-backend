@@ -60,6 +60,14 @@ class Settings(BaseSettings):
     ADMIN_EMAIL: Optional[str] = None
     ADMIN_PASSWORD: Optional[str] = None
 
+    # ── Trellis 3D Model Generation ───────────────────────────────────────────
+    HF_TOKEN: Optional[str] = None
+    TRELLIS_SPACE: str = "microsoft/TRELLIS.2"
+    TRELLIS_TIMEOUT_SECONDS: int = 300
+    TRELLIS_MAX_FILE_SIZE_MB: int = 15
+    TRELLIS_MAX_CONCURRENT_JOBS: int = 2
+    STORAGE_DIR: str = "storage"
+
     # ── Validators ────────────────────────────────────────────────────────────
 
     @field_validator("CORS_ORIGINS", mode="before")
