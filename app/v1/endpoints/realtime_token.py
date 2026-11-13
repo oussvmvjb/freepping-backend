@@ -1,4 +1,5 @@
 import logging
+import re
 from typing import Any
 
 import httpx
@@ -41,7 +42,14 @@ async def create_realtime_token(
         if isinstance(configured_origins, list)
         else [item.strip().rstrip("/") for item in configured_origins.split(",") if item.strip()]
     )
-    if not origin or origin not in allowed_origins:
+    is_dev = settings.DEBUG or settings.APP_ENV == "development"
+    is_lan_or_local = bool(
+        re.match(
+            r"^https?://(localhost|127\.0\.0\.1|192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+|172\.(1[6-9]|2\d|3[01])\.\d+\.\d+)(:\d+)?$",
+            origin,
+        )
+    )
+    if not origin or (origin not in allowed_origins and not (is_dev and is_lan_or_local)):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="This application origin is not allowed to request a realtime token.",
