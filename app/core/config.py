@@ -68,6 +68,9 @@ class Settings(BaseSettings):
     TRELLIS_MAX_CONCURRENT_JOBS: int = 2
     STORAGE_DIR: str = "storage"
 
+    # ── Decart Realtime Virtual Try-On ────────────────────────────────────────
+    DECART_API_KEY: Optional[str] = None
+
     # ── Validators ────────────────────────────────────────────────────────────
 
     @field_validator("CORS_ORIGINS", mode="before")

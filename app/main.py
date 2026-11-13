@@ -13,6 +13,7 @@ from app.core.exceptions import register_exception_handlers
 from app.db.base import Base
 from app.db.session import engine
 from app.services.redis.redis_client import redis_client
+from app.v1.endpoints.realtime_token import router as realtime_token_router
 
 
 async def ensure_database_exists() -> None:
@@ -89,6 +90,7 @@ app.include_router(api_router, prefix=settings.API_V1_STR)
 # Also mount Trellis 3D endpoints directly under /api for specification parity (/api/generate-3d, /api/health)
 from app.v1.endpoints.trellis import router as trellis_api_router
 app.include_router(trellis_api_router, prefix="/api", tags=["TRELLIS 3D Generation (/api)"])
+app.include_router(realtime_token_router, prefix="/api", tags=["Realtime Virtual Try-On"])
 
 
 @app.get("/", tags=["Root"], summary="API Root")
