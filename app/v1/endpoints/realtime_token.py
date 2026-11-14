@@ -15,8 +15,10 @@ router = APIRouter()
 token_rate_limit = check_rate_limit("realtime_token", max_requests=10)
 
 DECART_TOKEN_URL = "https://api.decart.ai/v1/client/tokens"
+DECART_CREDITS_URL = "https://api.decart.ai/v1/credits"
 REALTIME_MODEL = "lucy-vton-3.6"
 TOKEN_LIFETIME_SECONDS = 300
+credits_rate_limit = check_rate_limit("realtime_credits", max_requests=60)
 
 
 @router.post(
@@ -111,3 +113,64 @@ async def create_realtime_token(
         )
 
     return {"apiKey": token_data["apiKey"], "expiresAt": expires_at}
+
+
+@router.get(
+    "/realtime-credits",
+    summary="Get available Decart credits",
+    dependencies=[Depends(credits_rate_limit)],
+)
+async def get_realtime_credits(
+    _current_user: User = Depends(require_authenticated_user),
+) -> dict[str, int]:
+    api_key = settings.DECART_API_KEY
+    if not api_key or not api_key.strip():
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Realtime virtual try-on is not configured.",
+        )
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.get(
+                DECART_CREDITS_URL,
+                headers={"X-API-KEY": api_key},
+            )
+    except httpx.TimeoutException as exc:
+        logger.warning("Decart credits request timed out")
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Decart credits service timed out. Please try again.",
+        ) from exc
+    except httpx.RequestError as exc:
+        logger.exception("Could not reach Decart credits service")
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Could not reach the Decart credits service. Please try again.",
+        ) from exc
+
+    if not response.is_success:
+        logger.warning("Decart credits request failed with status %s", response.status_code)
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Decart could not retrieve the available credits.",
+        )
+
+    try:
+        credits_data: Any = response.json()
+    except ValueError as exc:
+        logger.error("Decart credits response was not valid JSON")
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Decart returned an invalid credits response.",
+        ) from exc
+
+    credits = credits_data.get("credits") if isinstance(credits_data, dict) else None
+    if isinstance(credits, bool) or not isinstance(credits, int) or credits < 0:
+        logger.error("Decart credits response was missing a valid credits value")
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Decart returned an invalid credits response.",
+        )
+
+    return {"credits": credits}

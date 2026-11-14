@@ -5,7 +5,7 @@ from fastapi.testclient import TestClient
 from app.api.deps import require_authenticated_user
 from app.core.config import settings
 from app.main import app
-from app.v1.endpoints.realtime_token import token_rate_limit
+from app.v1.endpoints.realtime_token import credits_rate_limit, token_rate_limit
 
 client = TestClient(app)
 ALLOWED_ORIGIN = "http://localhost:4200"
@@ -14,11 +14,13 @@ ALLOWED_ORIGIN = "http://localhost:4200"
 def _authorize_test_user():
     app.dependency_overrides[require_authenticated_user] = lambda: object()
     app.dependency_overrides[token_rate_limit] = lambda: None
+    app.dependency_overrides[credits_rate_limit] = lambda: None
 
 
 def _clear_test_overrides():
     app.dependency_overrides.pop(require_authenticated_user, None)
     app.dependency_overrides.pop(token_rate_limit, None)
+    app.dependency_overrides.pop(credits_rate_limit, None)
 
 
 def test_realtime_token_requires_authenticated_user():
@@ -94,3 +96,49 @@ def test_realtime_token_rejects_unconfigured_origin(monkeypatch):
         _clear_test_overrides()
 
     assert response.status_code == 403
+
+
+def test_realtime_credits_requires_authenticated_user():
+    app.dependency_overrides[credits_rate_limit] = lambda: None
+    try:
+        response = client.get("/api/realtime-credits")
+    finally:
+        app.dependency_overrides.pop(credits_rate_limit, None)
+
+    assert response.status_code == 401
+
+
+def test_realtime_credits_uses_server_key(monkeypatch):
+    _authorize_test_user()
+    monkeypatch.setattr(settings, "DECART_API_KEY", "server-secret")
+
+    class MockResponse:
+        is_success = True
+
+        @staticmethod
+        def json():
+            return {"credits": 1234}
+
+    class MockAsyncClient:
+        def __init__(self, timeout):
+            assert timeout == 10.0
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_):
+            return None
+
+        async def get(self, url, *, headers):
+            assert url == "https://api.decart.ai/v1/credits"
+            assert headers == {"X-API-KEY": "server-secret"}
+            return MockResponse()
+
+    try:
+        with patch("app.v1.endpoints.realtime_token.httpx.AsyncClient", MockAsyncClient):
+            response = client.get("/api/realtime-credits")
+    finally:
+        _clear_test_overrides()
+
+    assert response.status_code == 200
+    assert response.json() == {"credits": 1234}
