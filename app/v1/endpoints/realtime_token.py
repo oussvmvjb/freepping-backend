@@ -16,7 +16,7 @@ token_rate_limit = check_rate_limit("realtime_token", max_requests=10)
 
 DECART_TOKEN_URL = "https://api.decart.ai/v1/client/tokens"
 DECART_CREDITS_URL = "https://api.decart.ai/v1/credits"
-REALTIME_MODEL = "lucy-vton-3.6"
+ALLOWED_REALTIME_MODELS = ["lucy-vton-3.6", "lucy-vton-3.5", "lucy-2.5"]
 TOKEN_LIFETIME_SECONDS = 300
 credits_rate_limit = check_rate_limit("realtime_credits", max_requests=60)
 
@@ -64,7 +64,7 @@ async def create_realtime_token(
                 headers={"X-API-KEY": api_key},
                 json={
                     "expiresIn": TOKEN_LIFETIME_SECONDS,
-                    "allowedModels": [REALTIME_MODEL],
+                    "allowedModels": ALLOWED_REALTIME_MODELS,
                     "allowedOrigins": [origin],
                 },
             )

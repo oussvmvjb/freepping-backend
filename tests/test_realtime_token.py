@@ -69,7 +69,7 @@ def test_realtime_token_is_model_and_origin_restricted(monkeypatch):
             assert headers == {"X-API-KEY": "server-secret"}
             assert json == {
                 "expiresIn": 300,
-                "allowedModels": ["lucy-vton-3.6"],
+                "allowedModels": ["lucy-vton-3.6", "lucy-vton-3.5", "lucy-2.5"],
                 "allowedOrigins": [ALLOWED_ORIGIN],
             }
             return MockResponse()
